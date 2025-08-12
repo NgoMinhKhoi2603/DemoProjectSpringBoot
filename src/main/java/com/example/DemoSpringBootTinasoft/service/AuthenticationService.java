@@ -13,6 +13,7 @@ import com.example.DemoSpringBootTinasoft.security.JwtService;
 import jakarta.mail.MessagingException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -21,6 +22,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @RequiredArgsConstructor
@@ -33,6 +35,11 @@ public class AuthenticationService {
     private final EmailService emailService;
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
+
+    private final RedisTemplate<String, Object> redisTemplate;
+
+    @Value("${app.jwt.expiration-in-ms}")
+    private long jwtExpiration;
 
     @Value("${app.frontend.activation-url}")
     private String activationUrl;
@@ -67,6 +74,16 @@ public class AuthenticationService {
         var user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow();
         var jwtToken = jwtService.generateToken(user);
+
+        // Key là chính token, value là email của user.
+        // Thời gian sống của key trong Redis bằng thời gian sống của JWT.
+        redisTemplate.opsForValue().set(
+                jwtToken,
+                user.getEmail(),
+                jwtExpiration,
+                TimeUnit.MILLISECONDS
+        );
+
         return AuthenticationResponse.builder()
                 .token(jwtToken)
                 .build();
